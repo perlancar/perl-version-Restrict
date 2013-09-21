@@ -20,9 +20,14 @@ sub import {
         my ($lb, $lower, $upper, $ub) =
             ($range =~ /(.)([0-9.]+),([0-9.]+)(.)/);
         $lb = '>' . ( $lb eq '[' ? '=' : '');
+        $ub = '<' . ( $ub eq ']' ? '=' : '');
         $lower = version->parse($lower);
+        $upper = version->parse($upper);
         ${"$package\::__version_required"} = 1
             if $lb eq '>=' && $lower == $v0;
+        my $test = "sub { \$_[0] $lb version->parse('$lower') && ".
+            "\$_[0] $ub version->parse('$upper') }";
+        $restricted{$range} = [eval($test), $restricted{$range}];
     }
 
     *{"$package\::VERSION"} = sub {
@@ -33,15 +38,8 @@ sub import {
             die "$package version $req required--this is only version $version";
         }
         for my $range (@ranges) {
-            my ($lb, $lower, $upper, $ub) =
-		($range =~ /(.)([0-9.]+),([0-9.]+)(.)/);
-            $lb = '>' . ( $lb eq '[' ? '=' : '');
-            $ub = '<' . ( $ub eq ']' ? '=' : '');
-            $lower = version->parse($lower);
-            $upper = version->parse($upper);
-            my $test = "(\$req $lb \$lower and \$req $ub \$upper)";
-            if (eval $test) {
-                die "Cannot 'use $package $req': $restricted{$range}\n";
+            if ($restricted{$range}[0]->($req)) {
+                die "Cannot 'use $package $req': $restricted{$range}[1]\n";
             }
 	}
         ${"$package\::__version_checked"} = 1;
